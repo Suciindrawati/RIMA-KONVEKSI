@@ -10,10 +10,16 @@ use Illuminate\Http\Request;
 
 class TransaksiController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $transaksi = Transaksi::with(['pelanggan', 'produk'])->latest()->get();
-        return response()->json(['data' => $transaksi]);
+        $query = Transaksi::with(['pelanggan', 'produk']);
+
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $transaksi = $query->latest()->paginate(10);
+        return response()->json($transaksi);
     }
 
     public function store(Request $request)

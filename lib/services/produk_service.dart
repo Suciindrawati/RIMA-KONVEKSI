@@ -19,6 +19,17 @@ class ProdukService {
     return headers;
   }
 
+  Future<Map<String, dynamic>> getPaginated(int page) async {
+    final response = await http.get(
+      Uri.parse('${ApiConstants.produk}?page=$page'),
+      headers: await _headers(),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Gagal mengambil data produk');
+  }
+
   Future<List<ProdukModel>> getAll() async {
     final response = await http.get(Uri.parse(ApiConstants.produk), headers: await _headers());
     if (response.statusCode == 200) {

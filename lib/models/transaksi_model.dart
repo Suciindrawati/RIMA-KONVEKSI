@@ -1,3 +1,6 @@
+import 'pelanggan_model.dart';
+import 'produk_model.dart';
+
 class TransaksiModel {
   final int? id;
   final int pelangganId;
@@ -8,6 +11,8 @@ class TransaksiModel {
   final String? tanggal;
   final String? namaPelanggan;
   final String? namaProduk;
+  final PelangganModel? pelanggan;
+  final ProdukModel? produk;
 
   TransaksiModel({
     this.id,
@@ -19,6 +24,8 @@ class TransaksiModel {
     this.tanggal,
     this.namaPelanggan,
     this.namaProduk,
+    this.pelanggan,
+    this.produk,
   });
 
   factory TransaksiModel.fromJson(Map<String, dynamic> json) {
@@ -32,6 +39,8 @@ class TransaksiModel {
       tanggal: json['tanggal'] ?? json['created_at'],
       namaPelanggan: json['pelanggan']?['nama'],
       namaProduk: json['produk']?['nama_produk'],
+      pelanggan: json['pelanggan'] != null ? PelangganModel.fromJson(json['pelanggan']) : null,
+      produk: json['produk'] != null ? ProdukModel.fromJson(json['produk']) : null,
     );
   }
 

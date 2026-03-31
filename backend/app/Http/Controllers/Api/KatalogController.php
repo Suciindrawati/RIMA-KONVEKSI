@@ -9,9 +9,19 @@ use Illuminate\Support\Facades\Storage;
 
 class KatalogController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(['data' => Katalog::latest()->get()]);
+        $query = Katalog::query();
+
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('judul', 'like', "%{$search}%")
+                  ->orWhere('deskripsi', 'like', "%{$search}%");
+            });
+        }
+
+        return response()->json($query->latest()->paginate(10));
     }
 
     public function store(Request $request)
@@ -38,6 +48,28 @@ class KatalogController extends Controller
     public function show($id)
     {
         return response()->json(['data' => Katalog::findOrFail($id)]);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $katalog = Katalog::findOrFail($id);
+        $request->validate([
+            'judul'  => 'required|string|max:255',
+            'gambar' => 'nullable|max:10240',
+        ]);
+
+        if ($request->hasFile('gambar')) {
+            if ($katalog->gambar) {
+                Storage::disk('public')->delete($katalog->gambar);
+            }
+            $katalog->gambar = $request->file('gambar')->store('katalog', 'public');
+        }
+
+        $katalog->judul = $request->judul;
+        $katalog->deskripsi = $request->deskripsi;
+        $katalog->save();
+
+        return response()->json(['message' => 'Katalog berhasil diperbarui', 'data' => $katalog]);
     }
 
     public function destroy($id)

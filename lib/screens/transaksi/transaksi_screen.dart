@@ -16,27 +16,76 @@ class TransaksiScreen extends StatefulWidget {
 
 class _TransaksiScreenState extends State<TransaksiScreen> {
   final _transaksiService = TransaksiService();
+  final _scrollController = ScrollController();
   final _auth = AuthService();
+  
   List<TransaksiModel> _list = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _isLastPage = false;
+  int _page = 1;
   String _role = '';
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadInitial();
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        _loadMore();
+      }
+    });
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadInitial() async {
+    setState(() {
+      _loading = true;
+      _page = 1;
+      _isLastPage = false;
+      _list = [];
+    });
     try {
       final role = await _auth.getRole();
-      final list = await _transaksiService.getAll();
-      if (mounted) setState(() { _role = role ?? ''; _list = list; });
+      final res = await _transaksiService.getPaginated(page: 1);
+      final List data = res['data'];
+      if (mounted) {
+        setState(() {
+          _role = role ?? '';
+          _list = data.map((e) => TransaksiModel.fromJson(e)).toList();
+          _isLastPage = res['current_page'] >= res['last_page'];
+          _page = 2;
+        });
+      }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || _isLastPage) return;
+    setState(() => _loadingMore = true);
+    try {
+      final res = await _transaksiService.getPaginated(page: _page);
+      final List data = res['data'];
+      if (mounted) {
+        setState(() {
+          _list.addAll(data.map((e) => TransaksiModel.fromJson(e)).toList());
+          _isLastPage = res['current_page'] >= res['last_page'];
+          _page++;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error load more: $e');
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -54,7 +103,7 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
   }
 
   void _showStatusDialog(TransaksiModel t) {
-    if (_role != 'admin') return; // PROTEKSI: Karyawan tidak bisa update
+    if (_role != 'admin') return; 
     if (t.status == 'Pesanan Selesai') return; 
 
     showDialog(
@@ -73,7 +122,7 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
                   onTap: () async {
                     await _transaksiService.update(t.id!, {'status': 'Sedang Dalam Pengerjaan'});
                     Navigator.pop(ctx);
-                    _load();
+                    _loadInitial();
                   },
                 ),
               if (t.status == 'Sedang Dalam Pengerjaan' || t.status == 'Pesanan Dibuat')
@@ -101,7 +150,7 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
                               });
                               Navigator.pop(sc);
                               Navigator.pop(ctx);
-                              _load();
+                              _loadInitial();
                             },
                             child: const Text('Simpan & Selesai'),
                           ),
@@ -125,13 +174,13 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
         title: const Text('Daftar Transaksi / Orderan'),
         backgroundColor: const Color(0xFF1565C0),
         foregroundColor: Colors.white,
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _loadInitial)],
       ),
-      floatingActionButton: _role == 'admin' // PROTEKSI: Tombol Tambah hanya untuk Admin
+      floatingActionButton: _role == 'admin'
           ? FloatingActionButton.extended(
               onPressed: () async {
                 await Navigator.pushNamed(context, '/transaksi-form');
-                _load();
+                _loadInitial();
               },
               icon: const Icon(Icons.add),
               label: const Text('Buat Pesanan'),
@@ -139,66 +188,81 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
               foregroundColor: Colors.white,
             )
           : null,
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _list.isEmpty
-              ? const Center(child: Text('Belum ada transaksi'))
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _list.length,
-                    itemBuilder: (ctx, i) {
-                      final t = _list[i];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          onTap: _role == 'admin' ? () => _showStatusDialog(t) : null,
-                          leading: CircleAvatar(
-                            backgroundColor: _getStatusColor(t.status).withOpacity(0.1),
-                            child: Icon(
-                              t.status == 'Pesanan Selesai' ? Icons.check_circle : (t.status == 'Sedang Dalam Pengerjaan' ? Icons.build : Icons.receipt_long),
-                              color: _getStatusColor(t.status),
-                              size: 20,
-                            ),
-                          ),
-                          title: Text(t.namaPelanggan ?? 'Pelanggan'),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('${t.namaProduk ?? 'Produk'} x${t.jumlah}'),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: _getStatusColor(t.status).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(4),
+      body: Column(
+        children: [
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _list.isEmpty
+                    ? const Center(child: Text('Belum ada transaksi'))
+                    : RefreshIndicator(
+                        onRefresh: _loadInitial,
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _list.length + (_isLastPage ? 1 : 0),
+                          itemBuilder: (ctx, i) {
+                            if (i == _list.length) {
+                               return const Padding(
+                                 padding: EdgeInsets.symmetric(vertical: 20),
+                                 child: Center(child: Text('Semua data telah dimuat', style: TextStyle(color: Colors.grey))),
+                               );
+                            }
+                            final t = _list[i];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                onTap: _role == 'admin' ? () => _showStatusDialog(t) : null,
+                                leading: CircleAvatar(
+                                  backgroundColor: _getStatusColor(t.status).withOpacity(0.1),
+                                  child: Icon(
+                                    t.status == 'Pesanan Selesai' ? Icons.check_circle : (t.status == 'Sedang Dalam Pengerjaan' ? Icons.build : Icons.receipt_long),
+                                    color: _getStatusColor(t.status),
+                                    size: 20,
+                                  ),
                                 ),
-                                child: Text(t.status, style: TextStyle(fontSize: 10, color: _getStatusColor(t.status), fontWeight: FontWeight.bold)),
+                                title: Text(t.namaPelanggan ?? 'Pelanggan'),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('${t.namaProduk ?? 'Produk'} x${t.jumlah}'),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: _getStatusColor(t.status).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(t.status, style: TextStyle(fontSize: 10, color: _getStatusColor(t.status), fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ),
+                                trailing: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(_formatCurrency(t.totalHarga), style: const TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.bold)),
+                                    if (_role == 'admin' && t.status != 'Pesanan Selesai')
+                                      const Text('Klik utk Update', style: TextStyle(fontSize: 9, color: Colors.grey)),
+                                  ],
+                                ),
                               ),
-                            ],
-                          ),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(_formatCurrency(t.totalHarga), style: const TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.bold)),
-                              if (_role == 'admin' && t.status != 'Pesanan Selesai')
-                                const Text('Klik utk Update', style: TextStyle(fontSize: 9, color: Colors.grey)),
-                            ],
-                          ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      ),
+          ),
+          if (_loadingMore)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: LinearProgressIndicator(),
+            ),
+        ],
+      ),
     );
   }
 }
 
-// -------------------------------------------------------
-// Transaksi Form Screen (Hanya diakses Admin)
-// -------------------------------------------------------
 class TransaksiFormScreen extends StatefulWidget {
   const TransaksiFormScreen({super.key});
   @override

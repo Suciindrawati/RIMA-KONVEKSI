@@ -10,7 +10,7 @@ class ProdukController extends Controller
 {
     public function index()
     {
-        return response()->json(['data' => Produk::latest()->get()]);
+        return response()->json(Produk::latest()->paginate(10));
     }
 
     public function store(Request $request)

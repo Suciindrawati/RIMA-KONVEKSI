@@ -20,20 +20,37 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard', [TransaksiController::class, 'dashboard']);
 
     // Pelanggan
-    Route::apiResource('pelanggan', PelangganController::class);
+    Route::get('/pelanggan',      [PelangganController::class, 'index']);
+    Route::get('/pelanggan/{id}', [PelangganController::class, 'show']);
+    Route::middleware('admin')->group(function () {
+        Route::post('/pelanggan',     [PelangganController::class, 'store']);
+        Route::put('/pelanggan/{id}', [PelangganController::class, 'update']);
+        Route::delete('/pelanggan/{id}', [PelangganController::class, 'destroy']);
+    });
 
     // Produk
-    Route::apiResource('produk', ProdukController::class);
+    Route::get('/produk',      [ProdukController::class, 'index']);
+    Route::get('/produk/{id}', [ProdukController::class, 'show']);
+    Route::middleware('admin')->group(function () {
+        Route::post('/produk',     [ProdukController::class, 'store']);
+        Route::put('/produk/{id}', [ProdukController::class, 'update']);
+        Route::delete('/produk/{id}', [ProdukController::class, 'destroy']);
+    });
 
     // Transaksi
     Route::get('/transaksi',      [TransaksiController::class, 'index']);
-    Route::post('/transaksi',     [TransaksiController::class, 'store']);
-    Route::put('/transaksi/{id}', [TransaksiController::class, 'update']);
-    Route::delete('/transaksi/{id}', [TransaksiController::class, 'destroy']);
+    Route::middleware('admin')->group(function () {
+        Route::post('/transaksi',     [TransaksiController::class, 'store']);
+        Route::put('/transaksi/{id}', [TransaksiController::class, 'update']);
+        Route::delete('/transaksi/{id}', [TransaksiController::class, 'destroy']);
+    });
 
     // Katalog
     Route::get('/katalog',         [KatalogController::class, 'index']);
-    Route::post('/katalog',        [KatalogController::class, 'store']);
     Route::get('/katalog/{id}',    [KatalogController::class, 'show']);
-    Route::delete('/katalog/{id}', [KatalogController::class, 'destroy']);
+    Route::middleware('admin')->group(function () {
+        Route::post('/katalog',        [KatalogController::class, 'store']);
+        Route::put('/katalog/{id}',     [KatalogController::class, 'update']);
+        Route::delete('/katalog/{id}', [KatalogController::class, 'destroy']);
+    });
 });

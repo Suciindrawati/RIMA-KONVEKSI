@@ -18,6 +18,22 @@ class KatalogService {
     };
   }
 
+  Future<Map<String, dynamic>> getPaginated(int page, {String? search}) async {
+    String url = '${ApiConstants.katalog}?page=$page';
+    if (search != null && search.isNotEmpty) {
+      url += '&search=$search';
+    }
+    
+    final response = await http.get(
+      Uri.parse(url),
+      headers: await _headers(),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Gagal mengambil data katalog');
+  }
+
   Future<List<KatalogModel>> getAll() async {
     final response = await http.get(Uri.parse(ApiConstants.katalog), headers: await _headers());
     if (response.statusCode == 200) {
@@ -58,6 +74,37 @@ class KatalogService {
       return KatalogModel.fromJson(data['data']);
     } else {
       // Menampilkan detail error dari server jika gagal
+      throw Exception('Server Error (${response.statusCode}): ${response.body}');
+    }
+  }
+
+  Future<KatalogModel> update(int id, KatalogModel k, {Uint8List? imageBytes, String? imageName}) async {
+    final token = await _auth.getToken();
+    // Laravel Multipart Update hack: Use POST with _method=PUT
+    final request = http.MultipartRequest('POST', Uri.parse('${ApiConstants.katalog}/$id'));
+    request.headers['Authorization'] = 'Bearer $token';
+    request.headers['Accept'] = 'application/json';
+    request.fields['_method'] = 'PUT';
+    request.fields['judul'] = k.judul;
+    if (k.deskripsi != null) request.fields['deskripsi'] = k.deskripsi!;
+    
+    if (imageBytes != null && imageName != null) {
+      String extension = imageName.split('.').last.toLowerCase();
+      request.files.add(http.MultipartFile.fromBytes(
+        'gambar', 
+        imageBytes, 
+        filename: imageName,
+        contentType: MediaType('image', extension == 'png' ? 'png' : 'jpeg'),
+      ));
+    }
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return KatalogModel.fromJson(data['data']);
+    } else {
       throw Exception('Server Error (${response.statusCode}): ${response.body}');
     }
   }

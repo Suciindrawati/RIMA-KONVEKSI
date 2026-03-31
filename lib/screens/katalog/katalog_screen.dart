@@ -12,21 +12,31 @@ class KatalogScreen extends StatefulWidget {
   State<KatalogScreen> createState() => _KatalogScreenState();
 }
 
-class _StatefulAddDialog extends StatefulWidget {
+class _KatalogFormDialog extends StatefulWidget {
   final Function() onSuccess;
-  const _StatefulAddDialog({required this.onSuccess});
+  final KatalogModel? item;
+  const _KatalogFormDialog({required this.onSuccess, this.item});
 
   @override
-  State<_StatefulAddDialog> createState() => _StatefulAddDialogState();
+  State<_KatalogFormDialog> createState() => _KatalogFormDialogState();
 }
 
-class _StatefulAddDialogState extends State<_StatefulAddDialog> {
+class _KatalogFormDialogState extends State<_KatalogFormDialog> {
   final _service = KatalogService();
   final judulCtrl = TextEditingController();
   final deskCtrl = TextEditingController();
   Uint8List? imageBytes;
   String? imageName;
-  bool uploading = false;
+  bool loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.item != null) {
+      judulCtrl.text = widget.item!.judul;
+      deskCtrl.text = widget.item!.deskripsi ?? '';
+    }
+  }
 
   Future<void> _pick() async {
     final picker = ImagePicker();
@@ -43,7 +53,7 @@ class _StatefulAddDialogState extends State<_StatefulAddDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Tambah Katalog Baru'),
+      title: Text(widget.item == null ? 'Tambah Katalog Baru' : 'Edit Katalog'),
       content: SizedBox(
         width: 400,
         child: SingleChildScrollView(
@@ -57,7 +67,7 @@ class _StatefulAddDialogState extends State<_StatefulAddDialog> {
               const SizedBox(height: 12),
               TextField(
                 controller: deskCtrl,
-                maxLines: 2,
+                maxLines: 3,
                 decoration: const InputDecoration(labelText: 'Deskripsi', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 12),
@@ -69,12 +79,24 @@ class _StatefulAddDialogState extends State<_StatefulAddDialog> {
                     borderRadius: BorderRadius.circular(8),
                     image: DecorationImage(image: MemoryImage(imageBytes!), fit: BoxFit.cover),
                   ),
+                )
+              else if (widget.item?.gambar != null)
+                 Container(
+                  height: 150,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    image: DecorationImage(
+                      image: NetworkImage('${ApiConstants.baseUrl.replaceAll('/api', '')}/storage/${widget.item!.gambar}'),
+                      fit: BoxFit.cover
+                    ),
+                  ),
                 ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _pick,
                 icon: const Icon(Icons.image),
-                label: const Text('Pilih Gambar'),
+                label: Text(widget.item?.gambar != null ? 'Ganti Gambar' : 'Pilih Gambar'),
               ),
             ],
           ),
@@ -83,25 +105,36 @@ class _StatefulAddDialogState extends State<_StatefulAddDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
         ElevatedButton(
-          onPressed: uploading ? null : () async {
+          onPressed: loading ? null : () async {
             if (judulCtrl.text.isEmpty) return;
-            setState(() => uploading = true);
+            setState(() => loading = true);
             try {
-              await _service.create(
-                KatalogModel(judul: judulCtrl.text.trim(), deskripsi: deskCtrl.text.trim()),
-                imageBytes: imageBytes,
-                imageName: imageName,
-              );
+              if (widget.item == null) {
+                await _service.create(
+                  KatalogModel(judul: judulCtrl.text.trim(), deskripsi: deskCtrl.text.trim()),
+                  imageBytes: imageBytes,
+                  imageName: imageName,
+                );
+              } else {
+                await _service.update(
+                  widget.item!.id!,
+                  KatalogModel(judul: judulCtrl.text.trim(), deskripsi: deskCtrl.text.trim()),
+                  imageBytes: imageBytes,
+                  imageName: imageName,
+                );
+              }
               widget.onSuccess();
               if (mounted) Navigator.pop(context);
             } catch (e) {
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
             } finally {
-              if (mounted) setState(() => uploading = false);
+              if (mounted) setState(() => loading = false);
             }
           },
           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white),
-          child: uploading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Simpan'),
+          child: loading 
+            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+            : const Text('Simpan'),
         ),
       ],
     );
@@ -110,27 +143,159 @@ class _StatefulAddDialogState extends State<_StatefulAddDialog> {
 
 class _KatalogScreenState extends State<KatalogScreen> {
   final _service = KatalogService();
+  final _scrollController = ScrollController();
+  final _searchCtrl = TextEditingController();
+  
   List<KatalogModel> _list = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _isLastPage = false;
+  int _page = 1;
   String _role = '';
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadInitial();
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        _loadMore();
+      }
+    });
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadInitial() async {
+    setState(() {
+      _loading = true;
+      _page = 1;
+      _isLastPage = false;
+      _list = [];
+    });
     try {
       final role = await AuthService().getRole();
-      final list = await _service.getAll();
-      if (mounted) setState(() { _role = role ?? ''; _list = list; });
+      final res = await _service.getPaginated(1, search: _searchQuery);
+      final List data = res['data'];
+      if (mounted) {
+        setState(() {
+          _role = role ?? '';
+          _list = data.map((e) => KatalogModel.fromJson(e)).toList();
+          _isLastPage = res['current_page'] >= res['last_page'];
+          _page = 2;
+        });
+      }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || _isLastPage) return;
+    setState(() => _loadingMore = true);
+    try {
+      final res = await _service.getPaginated(_page, search: _searchQuery);
+      final List data = res['data'];
+      if (mounted) {
+        setState(() {
+          _list.addAll(data.map((e) => KatalogModel.fromJson(e)).toList());
+          _isLastPage = res['current_page'] >= res['last_page'];
+          _page++;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error load more: $e');
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  void _onSearch(String val) {
+    setState(() {
+      _searchQuery = val;
+    });
+    _loadInitial();
+  }
+
+  void _showPreview(KatalogModel k, String? imgUrl) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(10),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.white,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                    child: imgUrl != null 
+                      ? Image.network(imgUrl, fit: BoxFit.contain)
+                      : const Padding(
+                          padding: EdgeInsets.all(40.0),
+                          child: Icon(Icons.image_not_supported, size: 100, color: Colors.grey),
+                        ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(k.judul, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                        const SizedBox(height: 8),
+                        Text(k.deskripsi ?? 'Tidak ada deskripsi', style: const TextStyle(color: Colors.black87)),
+                        if (_role == 'admin') ...[
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                showDialog(context: context, builder: (_) => _KatalogFormDialog(onSuccess: _loadInitial, item: k));
+                              },
+                              icon: const Icon(Icons.edit),
+                              label: const Text('EDIT DATA'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                            ),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _delete(KatalogModel k) async {
@@ -150,8 +315,12 @@ class _KatalogScreenState extends State<KatalogScreen> {
       ),
     );
     if (confirm == true) {
-      await _service.delete(k.id!);
-      _load();
+      try {
+        await _service.delete(k.id!);
+        _loadInitial();
+      } catch (e) {
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal hapus: $e')));
+      }
     }
   }
 
@@ -163,91 +332,135 @@ class _KatalogScreenState extends State<KatalogScreen> {
         title: const Text('Katalog Model Pakaian'),
         backgroundColor: const Color(0xFF1565C0),
         foregroundColor: Colors.white,
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _loadInitial)],
       ),
       floatingActionButton: _role == 'admin'
           ? FloatingActionButton.extended(
-              onPressed: () => showDialog(context: context, builder: (_) => _StatefulAddDialog(onSuccess: _load)),
+              onPressed: () => showDialog(context: context, builder: (_) => _KatalogFormDialog(onSuccess: _loadInitial)),
               icon: const Icon(Icons.add_photo_alternate),
               label: const Text('Tambah'),
               backgroundColor: const Color(0xFF1565C0),
               foregroundColor: Colors.white,
             )
           : null,
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _list.isEmpty
-               ? const Center(child: Text('Belum ada katalog'))
-               : RefreshIndicator(
-                   onRefresh: _load,
-                   child: GridView.builder(
-                     padding: const EdgeInsets.all(12),
-                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                       crossAxisCount: 2,
-                       crossAxisSpacing: 10,
-                       mainAxisSpacing: 10,
-                       childAspectRatio: 0.75,
-                     ),
-                     itemCount: _list.length,
-                     itemBuilder: (ctx, i) {
-                       final k = _list[i];
-                       final imgUrl = k.gambar != null
-                           ? '${ApiConstants.baseUrl.replaceAll('/api', '')}/storage/${k.gambar}'
-                           : null;
-                       return Card(
-                         clipBehavior: Clip.antiAlias,
-                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                         child: Stack(
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: _onSearch,
+              decoration: InputDecoration(
+                hintText: 'Cari katalog...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchCtrl.text.isNotEmpty 
+                  ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchCtrl.clear(); _onSearch(''); }) 
+                  : null,
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _list.isEmpty
+                     ? const Center(child: Text('Belum ada katalog'))
+                     : RefreshIndicator(
+                         onRefresh: _loadInitial,
+                         child: ListView(
+                           controller: _scrollController,
                            children: [
-                             Column(
-                               children: [
-                                 Expanded(
-                                   child: imgUrl != null
-                                       ? Image.network(
-                                           imgUrl,
-                                           fit: BoxFit.cover,
-                                           width: double.infinity,
-                                           errorBuilder: (_, __, ___) => const Center(
-                                               child: Icon(Icons.image_not_supported, size: 40, color: Colors.grey)),
-                                         )
-                                       : Container(
-                                           color: Colors.grey.shade200,
-                                           child: const Center(child: Icon(Icons.checkroom, size: 40, color: Colors.grey)),
+                             GridView.builder(
+                               shrinkWrap: true,
+                               physics: const NeverScrollableScrollPhysics(),
+                               padding: const EdgeInsets.symmetric(horizontal: 12),
+                               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                 crossAxisCount: 2,
+                                 crossAxisSpacing: 10,
+                                 mainAxisSpacing: 10,
+                                 childAspectRatio: 0.75,
+                               ),
+                               itemCount: _list.length,
+                               itemBuilder: (ctx, i) {
+                                 final k = _list[i];
+                                 final imgUrl = k.gambar != null
+                                     ? '${ApiConstants.baseUrl.replaceAll('/api', '')}/storage/${k.gambar}'
+                                     : null;
+                                 return Card(
+                                   clipBehavior: Clip.antiAlias,
+                                   elevation: 2,
+                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                   child: InkWell(
+                                     onTap: () => _showPreview(k, imgUrl),
+                                     child: Stack(
+                                       children: [
+                                         Column(
+                                           crossAxisAlignment: CrossAxisAlignment.stretch,
+                                           children: [
+                                             Expanded(
+                                               child: imgUrl != null
+                                                   ? Image.network(
+                                                       imgUrl,
+                                                       fit: BoxFit.cover,
+                                                       errorBuilder: (_, __, ___) => const Center(
+                                                           child: Icon(Icons.image_not_supported, size: 40, color: Colors.grey)),
+                                                     )
+                                                   : Container(
+                                                       color: Colors.grey.shade200,
+                                                       child: const Center(child: Icon(Icons.checkroom, size: 40, color: Colors.grey)),
+                                                     ),
+                                             ),
+                                             Padding(
+                                               padding: const EdgeInsets.all(8),
+                                               child: Column(
+                                                 crossAxisAlignment: CrossAxisAlignment.start,
+                                                 children: [
+                                                   Text(k.judul, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                                   if (k.deskripsi != null && k.deskripsi!.isNotEmpty)
+                                                     Text(k.deskripsi!, style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                                 ],
+                                               ),
+                                             ),
+                                           ],
                                          ),
-                                 ),
-                                 Padding(
-                                   padding: const EdgeInsets.all(8),
-                                   child: Column(
-                                     crossAxisAlignment: CrossAxisAlignment.start,
-                                     children: [
-                                       Text(k.judul, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                       if (k.deskripsi != null && k.deskripsi!.isNotEmpty)
-                                         Text(k.deskripsi!, style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 2, overflow: TextOverflow.ellipsis),
-                                     ],
+                                         if (_role == 'admin')
+                                           Positioned(
+                                             top: 4,
+                                             right: 4,
+                                             child: CircleAvatar(
+                                               radius: 16,
+                                               backgroundColor: Colors.red.withOpacity(0.85),
+                                               child: IconButton(
+                                                 icon: const Icon(Icons.delete, size: 16, color: Colors.white),
+                                                 onPressed: () => _delete(k),
+                                                 padding: EdgeInsets.zero,
+                                               ),
+                                             ),
+                                           ),
+                                       ],
+                                     ),
                                    ),
-                                 ),
-                               ],
+                                 );
+                               },
                              ),
-                             if (_role == 'admin')
-                               Positioned(
-                                 top: 4,
-                                 right: 4,
-                                 child: CircleAvatar(
-                                   radius: 16,
-                                   backgroundColor: Colors.red.withOpacity(0.85),
-                                   child: IconButton(
-                                     icon: const Icon(Icons.delete, size: 16, color: Colors.white),
-                                     onPressed: () => _delete(k),
-                                     padding: EdgeInsets.zero,
-                                   ),
-                                 ),
+                             if (_loadingMore)
+                               const Padding(
+                                 padding: EdgeInsets.symmetric(vertical: 16),
+                                 child: Center(child: CircularProgressIndicator()),
+                               ),
+                             if (_isLastPage && _list.isNotEmpty)
+                               const Padding(
+                                 padding: EdgeInsets.symmetric(vertical: 16),
+                                 child: Center(child: Text('Semua data telah dimuat', style: TextStyle(color: Colors.grey))),
                                ),
                            ],
                          ),
-                       );
-                     },
-                   ),
-                 ),
+                       ),
+          ),
+        ],
+      ),
     );
   }
 }

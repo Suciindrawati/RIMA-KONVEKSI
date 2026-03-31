@@ -14,26 +14,75 @@ class ProdukScreen extends StatefulWidget {
 
 class _ProdukScreenState extends State<ProdukScreen> {
   final _service = ProdukService();
+  final _scrollController = ScrollController();
+  
   List<ProdukModel> _list = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _isLastPage = false;
+  int _page = 1;
   String _role = '';
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadInitial();
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        _loadMore();
+      }
+    });
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadInitial() async {
+    setState(() {
+      _loading = true;
+      _page = 1;
+      _isLastPage = false;
+      _list = [];
+    });
     try {
       final role = await AuthService().getRole();
-      final list = await _service.getAll();
-      if (mounted) setState(() { _role = role ?? ''; _list = list; });
+      final res = await _service.getPaginated(1);
+      final List data = res['data'];
+      if (mounted) {
+        setState(() {
+          _role = role ?? '';
+          _list = data.map((e) => ProdukModel.fromJson(e)).toList();
+          _isLastPage = res['current_page'] >= res['last_page'];
+          _page = 2;
+        });
+      }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || _isLastPage) return;
+    setState(() => _loadingMore = true);
+    try {
+      final res = await _service.getPaginated(_page);
+      final List data = res['data'];
+      if (mounted) {
+        setState(() {
+          _list.addAll(data.map((e) => ProdukModel.fromJson(e)).toList());
+          _isLastPage = res['current_page'] >= res['last_page'];
+          _page++;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error load more: $e');
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -54,11 +103,14 @@ class _ProdukScreenState extends State<ProdukScreen> {
       ),
     );
     if (confirm == true) {
-      await _service.delete(p.id!);
-      _load();
+      try {
+        await _service.delete(p.id!);
+        _loadInitial();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal hapus: $e')));
+      }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -68,13 +120,13 @@ class _ProdukScreenState extends State<ProdukScreen> {
         title: const Text('Data Produk'),
         backgroundColor: const Color(0xFF1565C0),
         foregroundColor: Colors.white,
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _loadInitial)],
       ),
       floatingActionButton: _role == 'admin'
           ? FloatingActionButton.extended(
               onPressed: () async {
                 await Navigator.pushNamed(context, '/produk-form');
-                _load();
+                _loadInitial();
               },
               icon: const Icon(Icons.add),
               label: const Text('Tambah'),
@@ -82,81 +134,100 @@ class _ProdukScreenState extends State<ProdukScreen> {
               foregroundColor: Colors.white,
             )
           : null,
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _list.isEmpty
-              ? const Center(child: Text('Belum ada data produk'))
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _list.length,
-                    itemBuilder: (ctx, i) {
-                      final p = _list[i];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF9C27B0).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: p.gambar != null
-                                ? ClipRRect(
+      body: Column(
+        children: [
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _list.isEmpty
+                    ? const Center(child: Text('Belum ada data produk'))
+                    : RefreshIndicator(
+                        onRefresh: _loadInitial,
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _list.length + (_isLastPage ? 1 : 0),
+                          itemBuilder: (ctx, i) {
+                            if (i == _list.length) {
+                               return const Padding(
+                                 padding: EdgeInsets.symmetric(vertical: 20),
+                                 child: Center(child: Text('Semua data telah dimuat', style: TextStyle(color: Colors.grey))),
+                               );
+                            }
+                            final p = _list[i];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                leading: Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF9C27B0).withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      '${ApiConstants.baseUrl.replaceAll('/api', '')}/storage/${p.gambar}',
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported, color: Colors.grey),
-                                    ),
-                                  )
-                                : const Icon(Icons.inventory_2, color: Color(0xFF9C27B0)),
-                          ),
-                          title: Text(p.namaProduk, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Jenis: ${p.jenisProduk}'),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: p.stok > 0 ? Colors.green.shade50 : Colors.red.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'Stok: ${p.stok}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: p.stok > 0 ? Colors.green : Colors.red,
                                   ),
+                                  child: p.gambar != null
+                                      ? ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Image.network(
+                                            '${ApiConstants.baseUrl.replaceAll('/api', '')}/storage/${p.gambar}',
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported, color: Colors.grey),
+                                          ),
+                                        )
+                                      : const Icon(Icons.inventory_2, color: Color(0xFF9C27B0)),
                                 ),
-                              ),
-                            ],
-                          ),
-                          isThreeLine: true,
-                          trailing: _role == 'admin'
-                              ? PopupMenuButton<String>(
-                                  onSelected: (v) {
-                                    if (v == 'edit') {
-                                      Navigator.pushNamed(context, '/produk-form', arguments: p)
-                                          .then((_) => _load());
-                                    } else {
-                                      _delete(p);
-                                    }
-                                  },
-                                  itemBuilder: (_) => [
-                                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                    const PopupMenuItem(value: 'hapus', child: Text('Hapus')),
+                                title: Text(p.namaProduk, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Jenis: ${p.jenisProduk}'),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: p.stok > 0 ? Colors.green.shade50 : Colors.red.shade50,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'Stok: ${p.stok}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: p.stok > 0 ? Colors.green : Colors.red,
+                                        ),
+                                      ),
+                                    ),
                                   ],
-                                )
-                              : null,
+                                ),
+                                isThreeLine: true,
+                                trailing: _role == 'admin'
+                                    ? PopupMenuButton<String>(
+                                        onSelected: (v) {
+                                          if (v == 'edit') {
+                                            Navigator.pushNamed(context, '/produk-form', arguments: p)
+                                                .then((_) => _loadInitial());
+                                          } else {
+                                            _delete(p);
+                                          }
+                                        },
+                                        itemBuilder: (_) => [
+                                          const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                          const PopupMenuItem(value: 'hapus', child: Text('Hapus')),
+                                        ],
+                                      )
+                                    : null,
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      ),
+          ),
+          if (_loadingMore)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: LinearProgressIndicator(),
+            ),
+        ],
+      ),
     );
   }
 }
+

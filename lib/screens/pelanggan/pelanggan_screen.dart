@@ -12,36 +12,90 @@ class PelangganScreen extends StatefulWidget {
 
 class _PelangganScreenState extends State<PelangganScreen> {
   final _service = PelangganService();
+  final _scrollController = ScrollController();
+  
   List<PelangganModel> _list = [];
-  List<PelangganModel> _filtered = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _isLastPage = false;
+  int _page = 1;
   String _role = '';
   final _searchCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadInitial();
     _searchCtrl.addListener(_onSearch);
-  }
-
-  void _onSearch() {
-    final q = _searchCtrl.text.toLowerCase();
-    setState(() {
-      _filtered = _list.where((p) => p.nama.toLowerCase().contains(q) || p.noHp.contains(q)).toList();
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        _loadMore();
+      }
     });
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onSearch() {
+    // Note: Search implementation might need to be server-side for large data
+    // For now we keep local filter for current loaded items
+    setState(() {});
+  }
+
+  List<PelangganModel> get _filtered {
+    final q = _searchCtrl.text.toLowerCase();
+    if (q.isEmpty) return _list;
+    return _list.where((p) => p.nama.toLowerCase().contains(q) || p.noHp.contains(q)).toList();
+  }
+
+  Future<void> _loadInitial() async {
+    setState(() {
+      _loading = true;
+      _page = 1;
+      _isLastPage = false;
+      _list = [];
+    });
     try {
       final role = await AuthService().getRole();
-      final list = await _service.getAll();
-      if (mounted) setState(() { _role = role ?? ''; _list = list; _filtered = list; });
+      final res = await _service.getPaginated(1);
+      final List data = res['data'];
+      if (mounted) {
+        setState(() {
+          _role = role ?? '';
+          _list = data.map((e) => PelangganModel.fromJson(e)).toList();
+          _isLastPage = res['current_page'] >= res['last_page'];
+          _page = 2;
+        });
+      }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || _isLastPage) return;
+    setState(() => _loadingMore = true);
+    try {
+      final res = await _service.getPaginated(_page);
+      final List data = res['data'];
+      if (mounted) {
+        setState(() {
+          _list.addAll(data.map((e) => PelangganModel.fromJson(e)).toList());
+          _isLastPage = res['current_page'] >= res['last_page'];
+          _page++;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error load more: $e');
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -62,8 +116,12 @@ class _PelangganScreenState extends State<PelangganScreen> {
       ),
     );
     if (confirm == true) {
-      await _service.delete(p.id!);
-      _load();
+      try {
+        await _service.delete(p.id!);
+        _loadInitial();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal hapus: $e')));
+      }
     }
   }
 
@@ -75,13 +133,13 @@ class _PelangganScreenState extends State<PelangganScreen> {
         title: const Text('Data Pelanggan'),
         backgroundColor: const Color(0xFF1565C0),
         foregroundColor: Colors.white,
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _loadInitial)],
       ),
       floatingActionButton: _role == 'admin'
           ? FloatingActionButton.extended(
               onPressed: () async {
                 await Navigator.pushNamed(context, '/pelanggan-form');
-                _load();
+                _loadInitial();
               },
               icon: const Icon(Icons.add),
               label: const Text('Tambah'),
@@ -110,11 +168,18 @@ class _PelangganScreenState extends State<PelangganScreen> {
                 : _filtered.isEmpty
                     ? const Center(child: Text('Belum ada data pelanggan'))
                     : RefreshIndicator(
-                        onRefresh: _load,
+                        onRefresh: _loadInitial,
                         child: ListView.builder(
+                          controller: _scrollController,
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          itemCount: _filtered.length,
+                          itemCount: _filtered.length + (_isLastPage ? 1 : 0),
                           itemBuilder: (ctx, i) {
+                            if (i == _filtered.length) {
+                               return const Padding(
+                                 padding: EdgeInsets.symmetric(vertical: 20),
+                                 child: Center(child: Text('Semua data telah dimuat', style: TextStyle(color: Colors.grey))),
+                               );
+                            }
                             final p = _filtered[i];
                             return Card(
                               margin: const EdgeInsets.only(bottom: 8),
@@ -134,7 +199,7 @@ class _PelangganScreenState extends State<PelangganScreen> {
                                         onSelected: (v) {
                                           if (v == 'edit') {
                                             Navigator.pushNamed(context, '/pelanggan-form',
-                                                arguments: p).then((_) => _load());
+                                                arguments: p).then((_) => _loadInitial());
                                           } else {
                                             _delete(p);
                                           }
@@ -152,8 +217,14 @@ class _PelangganScreenState extends State<PelangganScreen> {
                         ),
                       ),
           ),
+          if (_loadingMore)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: LinearProgressIndicator(),
+            ),
         ],
       ),
     );
   }
 }
+

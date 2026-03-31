@@ -10,8 +10,8 @@ class PelangganController extends Controller
 {
     public function index()
     {
-        $pelanggan = Pelanggan::latest()->get();
-        return response()->json(['data' => $pelanggan]);
+        $pelanggan = Pelanggan::latest()->paginate(10);
+        return response()->json($pelanggan);
     }
 
     public function store(Request $request)

@@ -16,6 +16,20 @@ class TransaksiService {
     };
   }
 
+  Future<Map<String, dynamic>> getPaginated({int page = 1, String? status}) async {
+    String url = '${ApiConstants.transaksi}?page=$page';
+    if (status != null) url += '&status=$status';
+    
+    final response = await http.get(
+      Uri.parse(url),
+      headers: await _headers(),
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Gagal mengambil data transaksi');
+  }
+
   Future<List<TransaksiModel>> getAll() async {
     final response = await http.get(Uri.parse(ApiConstants.transaksi), headers: await _headers());
     if (response.statusCode == 200) {
