@@ -11,6 +11,17 @@ use App\Http\Controllers\Api\KatalogController;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login',    [AuthController::class, 'login']);
 
+// Proxy Storage for CORS (Flutter Web)
+Route::get('/storage/{disk}/{file}', function ($disk, $file) {
+    $path = storage_path("app/public/{$disk}/{$file}");
+    if (!file_exists($path)) abort(404);
+    return response()->file($path, [
+        'Access-Control-Allow-Origin' => '*',
+        'Access-Control-Allow-Methods' => 'GET',
+        'Access-Control-Allow-Headers' => 'Content-Type, X-Requested-With',
+    ]);
+})->where('file', '.*');
+
 // Protected routes (require token)
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);

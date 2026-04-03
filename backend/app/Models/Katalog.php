@@ -13,4 +13,9 @@ class Katalog extends Model
         'deskripsi',
         'gambar',
     ];
+
+    public function gambars()
+    {
+        return $this->hasMany(KatalogGambar::class);
+    }
 }

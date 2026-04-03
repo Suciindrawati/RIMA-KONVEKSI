@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../models/transaksi_model.dart';
 import '../../models/pelanggan_model.dart';
 import '../../models/produk_model.dart';
@@ -15,7 +17,7 @@ class TransaksiScreen extends StatefulWidget {
 }
 
 class _TransaksiScreenState extends State<TransaksiScreen> {
-  final _transaksiService = TransaksiService();
+  final _ts = TransaksiService();
   final _scrollController = ScrollController();
   final _auth = AuthService();
   
@@ -25,34 +27,45 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
   bool _isLastPage = false;
   int _page = 1;
   String _role = '';
+  dynamic _selectedStatus;
+  
+  final _searchController = TextEditingController();
+  DateTime? _debounceTime;
+
+  final List<Map<String, dynamic>> _statusFilters = [
+    {'label': 'Semua', 'value': null},
+    {'label': 'Dibuat', 'value': 'Pesanan Dibuat'},
+    {'label': 'Proses', 'value': 'Diproses'},
+    {'label': 'Selesai', 'value': ['Pesanan Selesai', 'Selesai']},
+  ];
 
   @override
   void initState() {
     super.initState();
     _loadInitial();
-    _scrollController.addListener(() {
-      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-        _loadMore();
-      }
-    });
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      if (!_loading && !_loadingMore && !_isLastPage) {
+        _loadMore();
+      }
+    }
+  }
+
   Future<void> _loadInitial() async {
-    setState(() {
-      _loading = true;
-      _page = 1;
-      _isLastPage = false;
-      _list = [];
-    });
+    setState(() { _loading = true; _page = 1; _isLastPage = false; _list = []; });
     try {
       final role = await _auth.getRole();
-      final res = await _transaksiService.getPaginated(page: 1);
+      final res = await _ts.getPaginated(page: 1, search: _searchController.text, status: _selectedStatus);
       final List data = res['data'];
       if (mounted) {
         setState(() {
@@ -63,17 +76,16 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
         });
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _loadMore() async {
-    if (_loadingMore || _isLastPage) return;
     setState(() => _loadingMore = true);
     try {
-      final res = await _transaksiService.getPaginated(page: _page);
+      final res = await _ts.getPaginated(page: _page, search: _searchController.text, status: _selectedStatus);
       final List data = res['data'];
       if (mounted) {
         setState(() {
@@ -89,176 +101,270 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
     }
   }
 
-  String _formatCurrency(double? val) {
-    if (val == null) return '-';
-    return NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(val);
+  void _onSearchChanged(String v) {
+    if (_debounceTime?.isAfter(DateTime.now()) ?? false) return;
+    _debounceTime = DateTime.now().add(const Duration(milliseconds: 600));
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) _loadInitial();
+    });
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Pesanan Selesai': return Colors.green;
-      case 'Sedang Dalam Pengerjaan': return Colors.orange;
-      default: return Colors.blue;
+  Future<void> _updateStatus(TransaksiModel t) async {
+    if (_role != 'admin') return;
+    String newStatus = '';
+    if (t.status == 'Pesanan Dibuat') newStatus = 'Diproses';
+    else if (t.status == 'Diproses') newStatus = 'Selesai';
+    else return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Update Status'),
+        content: Text('Tandai pesanan ini sebagai "$newStatus"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Ya, Update')),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        if (newStatus == 'Selesai') {
+          final h = await _askHarga();
+          if (h != null) {
+            await _ts.update(t.id!, {'status': newStatus, 'total_harga': h});
+            _loadInitial();
+          }
+        } else {
+          await _ts.update(t.id!, {'status': newStatus});
+          _loadInitial();
+        }
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal: $e')));
+      }
     }
   }
 
-  void _showStatusDialog(TransaksiModel t) {
-    if (_role != 'admin') return; 
-    if (t.status == 'Pesanan Selesai') return; 
-
-    showDialog(
+  Future<int?> _askHarga() async {
+    final ctrl = TextEditingController();
+    return showDialog<int>(
       context: context,
-      builder: (ctx) {
-        final hargaCtrl = TextEditingController();
-        return AlertDialog(
-          title: const Text('Update Status Pesanan'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (t.status == 'Pesanan Dibuat')
-                ListTile(
-                  leading: const Icon(Icons.build, color: Colors.orange),
-                  title: const Text('Mulai Pengerjaan'),
-                  onTap: () async {
-                    await _transaksiService.update(t.id!, {'status': 'Sedang Dalam Pengerjaan'});
-                    Navigator.pop(ctx);
-                    _loadInitial();
-                  },
-                ),
-              if (t.status == 'Sedang Dalam Pengerjaan' || t.status == 'Pesanan Dibuat')
-                ListTile(
-                  leading: const Icon(Icons.check_circle, color: Colors.green),
-                  title: const Text('Selesaikan Pesanan'),
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (sc) => AlertDialog(
-                        title: const Text('Input Harga Selesai'),
-                        content: TextField(
-                          controller: hargaCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Total Harga Pesanan', prefixText: 'Rp '),
-                        ),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(sc), child: const Text('Batal')),
-                          ElevatedButton(
-                            onPressed: () async {
-                              final price = double.tryParse(hargaCtrl.text) ?? 0;
-                              await _transaksiService.update(t.id!, {
-                                'status': 'Pesanan Selesai',
-                                'total_harga': price,
-                              });
-                              Navigator.pop(sc);
-                              Navigator.pop(ctx);
-                              _loadInitial();
-                            },
-                            child: const Text('Simpan & Selesai'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-            ],
-          ),
-        );
-      },
+      builder: (ctx) => AlertDialog(
+        title: const Text('Input Harga Akhir'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Total Harga (Rp)', hintText: 'Contoh: 150000'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, int.tryParse(ctrl.text)), child: const Text('Simpan')),
+        ],
+      ),
     );
   }
+
+  String _formatCurrency(double? n) => NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(n ?? 0);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Daftar Transaksi / Orderan'),
-        backgroundColor: const Color(0xFF1565C0),
-        foregroundColor: Colors.white,
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _loadInitial)],
+        title: Text('Riwayat Transaksi', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
+        actions: [IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _loadInitial)],
       ),
       floatingActionButton: _role == 'admin'
           ? FloatingActionButton.extended(
-              onPressed: () async {
-                await Navigator.pushNamed(context, '/transaksi-form');
-                _loadInitial();
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Buat Pesanan'),
-              backgroundColor: const Color(0xFF1565C0),
-              foregroundColor: Colors.white,
+              onPressed: () => Navigator.pushNamed(context, '/transaksi-form').then((_) => _loadInitial()),
+              icon: const Icon(Icons.add_shopping_cart_rounded),
+              label: const Text('Pesanan Baru'),
             )
           : null,
       body: Column(
         children: [
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _list.isEmpty
-                    ? const Center(child: Text('Belum ada transaksi'))
-                    : RefreshIndicator(
-                        onRefresh: _loadInitial,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.all(12),
-                          itemCount: _list.length + (_isLastPage ? 1 : 0),
-                          itemBuilder: (ctx, i) {
-                            if (i == _list.length) {
-                               return const Padding(
-                                 padding: EdgeInsets.symmetric(vertical: 20),
-                                 child: Center(child: Text('Semua data telah dimuat', style: TextStyle(color: Colors.grey))),
-                               );
-                            }
-                            final t = _list[i];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                onTap: _role == 'admin' ? () => _showStatusDialog(t) : null,
-                                leading: CircleAvatar(
-                                  backgroundColor: _getStatusColor(t.status).withOpacity(0.1),
-                                  child: Icon(
-                                    t.status == 'Pesanan Selesai' ? Icons.check_circle : (t.status == 'Sedang Dalam Pengerjaan' ? Icons.build : Icons.receipt_long),
-                                    color: _getStatusColor(t.status),
-                                    size: 20,
-                                  ),
-                                ),
-                                title: Text(t.namaPelanggan ?? 'Pelanggan'),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('${t.namaProduk ?? 'Produk'} x${t.jumlah}'),
-                                    const SizedBox(height: 4),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: _getStatusColor(t.status).withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(t.status, style: TextStyle(fontSize: 10, color: _getStatusColor(t.status), fontWeight: FontWeight.bold)),
-                                    ),
-                                  ],
-                                ),
-                                trailing: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(_formatCurrency(t.totalHarga), style: const TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.bold)),
-                                    if (_role == 'admin' && t.status != 'Pesanan Selesai')
-                                      const Text('Klik utk Update', style: TextStyle(fontSize: 9, color: Colors.grey)),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-          ),
-          if (_loadingMore)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
-              child: LinearProgressIndicator(),
+          Padding(
+            padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 10),
+            child: TextField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              decoration: const InputDecoration(hintText: 'Cari Pelanggan / Produk...', prefixIcon: Icon(Icons.search_rounded)),
             ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: Row(
+              children: _statusFilters.map((f) {
+                final isSelected = _selectedStatus == f['value'];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(f['label']!, style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? Colors.white : const Color(0xFF64748B))),
+                    selected: isSelected,
+                    onSelected: (v) {
+                      setState(() => _selectedStatus = f['value']);
+                      _loadInitial();
+                    },
+                    selectedColor: const Color(0xFFF97316),
+                    backgroundColor: Colors.white,
+                    checkmarkColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50), side: BorderSide(color: isSelected ? const Color(0xFFF97316) : const Color(0xFFE2E8F0))),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          Expanded(
+            child: _loading 
+                ? _buildInitialShimmer() 
+                : RefreshIndicator(
+                    onRefresh: _loadInitial,
+                    child: _list.isEmpty
+                        ? _emptyState()
+                        : ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            itemCount: _list.length + 1,
+                            itemBuilder: (ctx, i) {
+                              if (i == _list.length) {
+                                return _loadingMore ? _buildMoreShimmer() : (_isLastPage && _list.isNotEmpty ? _buildFooter() : const SizedBox(height: 100));
+                              }
+                              final t = _list[i];
+                              return _buildTransactionCard(t);
+                            },
+                          ),
+                  ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTransactionCard(TransaksiModel t) {
+    Color tagColor;
+    Color textColor;
+    Color bgColor;
+
+    if (t.status.contains('Selesai')) {
+      tagColor = const Color(0xFF10B981); // Green
+      textColor = const Color(0xFF10B981);
+      bgColor = const Color(0xFFF0FDF4);
+    } else if (t.status == 'Diproses') {
+      tagColor = const Color(0xFFF97316); // Orange
+      textColor = const Color(0xFFF97316);
+      bgColor = const Color(0xFFFFF7ED);
+    } else {
+      tagColor = const Color(0xFF3B82F6); // Blue for "Pesanan Dibuat"
+      textColor = const Color(0xFF3B82F6);
+      bgColor = const Color(0xFFEFF6FF);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFE2E8F0))),
+      child: InkWell(
+        onTap: () => _updateStatus(t),
+        borderRadius: BorderRadius.circular(24),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(DateFormat('dd MMM yyyy, HH:mm').format(DateTime.parse(t.tanggal ?? DateTime.now().toIso8601String())), style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      t.status.toUpperCase(),
+                      style: TextStyle(color: textColor, fontSize: 9, fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(t.namaPelanggan ?? '-', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16)),
+              const SizedBox(height: 4),
+              Text(t.namaProduk ?? '-', style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+              const Divider(height: 32, color: Color(0xFFF1F5F9)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('JUMLAH', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)),
+                      Text('${t.jumlah} Pcs', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text('TOTAL HARGA', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)),
+                      Text(_formatCurrency(t.totalHarga), style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, color: const Color(0xFF1E293B), fontSize: 16)),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInitialShimmer() {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      itemCount: 5,
+      itemBuilder: (_, __) => Shimmer.fromColors(
+        baseColor: Colors.grey[300]!,
+        highlightColor: Colors.grey[100]!,
+        child: Container(
+          height: 180,
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreShimmer() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: Container(
+        height: 150,
+        margin: const EdgeInsets.only(bottom: 24),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 40),
+      child: Center(child: Text('Semua riwayat telah dimuat', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold))),
+    );
+  }
+
+  Widget _emptyState() {
+    return ListView(
+      children: [
+        SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+        const Icon(Icons.receipt_long_rounded, size: 64, color: Color(0xFFCBD5E1)),
+        const SizedBox(height: 16),
+        const Center(child: Text('Belum ada riwayat transaksi.', style: TextStyle(color: Color(0xFF64748B)))),
+      ],
     );
   }
 }
@@ -271,7 +377,7 @@ class TransaksiFormScreen extends StatefulWidget {
 
 class _TransaksiFormScreenState extends State<TransaksiFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _transaksiService = TransaksiService();
+  final _ts = TransaksiService();
   final _pelangganService = PelangganService();
   final _produkService = ProdukService();
 
@@ -311,9 +417,9 @@ class _TransaksiFormScreenState extends State<TransaksiFormScreen> {
         status: 'Pesanan Dibuat',
         tanggal: DateTime.now().toIso8601String(),
       );
-      await _transaksiService.create(t);
+      await _ts.create(t);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pesanan Berhasil Dibuat')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pesanan Berhasil Dibuat!')));
         Navigator.pop(context);
       }
     } catch (e) {
@@ -326,47 +432,59 @@ class _TransaksiFormScreenState extends State<TransaksiFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Buat Pesanan Baru'), backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white),
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(title: Text('Input Pesanan Baru', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800))),
       body: _loadingData
           ? const Center(child: CircularProgressIndicator())
           : Form(
               key: _formKey,
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
                 children: [
-                   const Text('Input data untuk pesanan baru. Harga akan diinput oleh Admin setelah pesanan selesai.', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(color: const Color(0xFFFFF7ED), borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFFFEDD5))),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.verified_user_rounded, color: Color(0xFFF97316)),
+                        const SizedBox(width: 16),
+                        Expanded(child: Text('Simpan pesanan untuk mulai produksi. Harga akhir akan ditentukan setelah penjahitan selesai.', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.bold, color: const Color(0xFF9A3412)))),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
                   DropdownButtonFormField<PelangganModel>(
-                    decoration: const InputDecoration(labelText: 'Nama Pelanggan', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(labelText: 'Pilih Pelanggan', prefixIcon: Icon(Icons.person_search_rounded)),
                     value: _selectedPelanggan,
-                    items: _pelangganList.map((p) => DropdownMenuItem(value: p, child: Text(p.nama))).toList(),
+                    items: _pelangganList.map((p) => DropdownMenuItem(value: p, child: Text(p.nama, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)))).toList(),
                     onChanged: (v) => setState(() => _selectedPelanggan = v),
-                    validator: (v) => v == null ? 'Wajib pilih pelanggan' : null,
+                    validator: (v) => v == null ? 'Pilih pelanggan' : null,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   DropdownButtonFormField<ProdukModel>(
-                    decoration: const InputDecoration(labelText: 'Produk Konveksi', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(labelText: 'Model / Jenis Bahan', prefixIcon: Icon(Icons.inventory_2_rounded)),
                     value: _selectedProduk,
-                    items: _produkList.map((p) => DropdownMenuItem(value: p, child: Text(p.namaProduk))).toList(),
+                    items: _produkList.map((p) => DropdownMenuItem(value: p, child: Text(p.namaProduk, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)))).toList(),
                     onChanged: (v) => setState(() => _selectedProduk = v),
-                    validator: (v) => v == null ? 'Wajib pilih produk' : null,
+                    validator: (v) => v == null ? 'Pilih produk' : null,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   TextFormField(
                     controller: _jumlahCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Jumlah Pesanan', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(labelText: 'Jumlah Pesanan (Pcs)', prefixIcon: Icon(Icons.add_shopping_cart_rounded)),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                     validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 48),
                   SizedBox(
-                    height: 48,
+                    height: 60,
                     child: ElevatedButton(
                       onPressed: _loading ? null : _save,
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white),
-                      child: Text(_loading ? 'Menyimpan...' : 'BUAT PESANAN SEKARANG'),
+                      child: _loading ? const CircularProgressIndicator(color: Colors.white) : const Text('BUAT PESANAN SEKARANG', style: TextStyle(letterSpacing: 1, fontWeight: FontWeight.w900)),
                     ),
                   ),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),

@@ -8,9 +8,17 @@ use Illuminate\Http\Request;
 
 class PelangganController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $pelanggan = Pelanggan::latest()->paginate(10);
+        $query = Pelanggan::latest();
+
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where('nama', 'like', "%$search%")
+                  ->orWhere('no_hp', 'like', "%$search%");
+        }
+
+        $pelanggan = $query->paginate(15);
         return response()->json($pelanggan);
     }
 

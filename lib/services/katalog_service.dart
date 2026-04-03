@@ -43,7 +43,7 @@ class KatalogService {
     throw Exception('Gagal mengambil data katalog');
   }
 
-  Future<KatalogModel> create(KatalogModel k, {Uint8List? imageBytes, String? imageName}) async {
+  Future<KatalogModel> create(KatalogModel k, {Uint8List? imageBytes, String? imageName, List<Uint8List>? galleryBytes, List<String>? galleryNames}) async {
     final token = await _auth.getToken();
     final request = http.MultipartRequest('POST', Uri.parse(ApiConstants.katalog));
     request.headers['Authorization'] = 'Bearer $token';
@@ -52,18 +52,26 @@ class KatalogService {
     if (k.deskripsi != null) request.fields['deskripsi'] = k.deskripsi!;
     
     if (imageBytes != null && imageName != null) {
-      // Mendeteksi mime type dari ekstensi file
       String extension = imageName.split('.').last.toLowerCase();
-      String mimeType = 'image/jpeg';
-      if (extension == 'png') mimeType = 'image/png';
-      if (extension == 'gif') mimeType = 'image/gif';
-
       request.files.add(http.MultipartFile.fromBytes(
         'gambar', 
         imageBytes, 
         filename: imageName,
         contentType: MediaType('image', extension == 'png' ? 'png' : 'jpeg'),
       ));
+    }
+
+    // New Gallery
+    if (galleryBytes != null && galleryNames != null) {
+      for (int i = 0; i < galleryBytes.length; i++) {
+        String ext = galleryNames[i].split('.').last.toLowerCase();
+        request.files.add(http.MultipartFile.fromBytes(
+          'gallery[]', 
+          galleryBytes[i], 
+          filename: galleryNames[i],
+          contentType: MediaType('image', ext == 'png' ? 'png' : 'jpeg'),
+        ));
+      }
     }
 
     final streamed = await request.send();
@@ -73,14 +81,12 @@ class KatalogService {
       final data = jsonDecode(response.body);
       return KatalogModel.fromJson(data['data']);
     } else {
-      // Menampilkan detail error dari server jika gagal
       throw Exception('Server Error (${response.statusCode}): ${response.body}');
     }
   }
 
-  Future<KatalogModel> update(int id, KatalogModel k, {Uint8List? imageBytes, String? imageName}) async {
+  Future<KatalogModel> update(int id, KatalogModel k, {Uint8List? imageBytes, String? imageName, List<Uint8List>? galleryBytes, List<String>? galleryNames}) async {
     final token = await _auth.getToken();
-    // Laravel Multipart Update hack: Use POST with _method=PUT
     final request = http.MultipartRequest('POST', Uri.parse('${ApiConstants.katalog}/$id'));
     request.headers['Authorization'] = 'Bearer $token';
     request.headers['Accept'] = 'application/json';
@@ -96,6 +102,18 @@ class KatalogService {
         filename: imageName,
         contentType: MediaType('image', extension == 'png' ? 'png' : 'jpeg'),
       ));
+    }
+
+    if (galleryBytes != null && galleryNames != null) {
+      for (int i = 0; i < galleryBytes.length; i++) {
+        String ext = galleryNames[i].split('.').last.toLowerCase();
+        request.files.add(http.MultipartFile.fromBytes(
+          'gallery[]', 
+          galleryBytes[i], 
+          filename: galleryNames[i],
+          contentType: MediaType('image', ext == 'png' ? 'png' : 'jpeg'),
+        ));
+      }
     }
 
     final streamed = await request.send();

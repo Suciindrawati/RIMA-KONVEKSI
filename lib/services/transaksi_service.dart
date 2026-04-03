@@ -16,9 +16,16 @@ class TransaksiService {
     };
   }
 
-  Future<Map<String, dynamic>> getPaginated({int page = 1, String? status}) async {
+  Future<Map<String, dynamic>> getPaginated({int page = 1, dynamic status, String? search}) async {
     String url = '${ApiConstants.transaksi}?page=$page';
-    if (status != null) url += '&status=$status';
+    if (status != null) {
+      if (status is List) {
+        for (var s in status) { url += '&status[]=$s'; }
+      } else {
+        url += '&status=$status';
+      }
+    }
+    if (search != null && search.isNotEmpty) url += '&search=$search';
     
     final response = await http.get(
       Uri.parse(url),

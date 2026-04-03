@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../models/pelanggan_model.dart';
 import '../../services/pelanggan_service.dart';
 
@@ -48,7 +49,6 @@ class _PelangganFormScreenState extends State<PelangganFormScreen> {
       _hpCtrl.text = args.noHp;
       _ketCtrl.text = args.keterangan ?? '';
       
-      // Baju
       _bajuPu.text = args.bajuPu ?? ''; _bajuPi.text = args.bajuPi ?? ''; _bajuPa.text = args.bajuPa ?? '';
       _bajuLt.text = args.bajuLt ?? ''; _bajuGn.text = args.bajuGn ?? '';
       _bajuLe.text = args.bajuLe ?? ''; _bajuDa.text = args.bajuDa ?? '';
@@ -57,12 +57,10 @@ class _PelangganFormScreenState extends State<PelangganFormScreen> {
       _bajuAts.text = args.bajuAts ?? ''; _bajuSk.text = args.bajuSk ?? ''; _bajuBwh.text = args.bajuBwh ?? '';
       _bajuA.text = args.bajuA ?? ''; _bajuB.text = args.bajuB ?? '';
 
-      // Celana
       _celanaPi.text = args.celanaPi ?? ''; _celanaPa.text = args.celanaPa ?? ''; _celanaPh.text = args.celanaPh ?? '';
       _celanaLt.text = args.celanaLt ?? ''; _celanaPsk.text = args.celanaPsk ?? '';
       _celanaLtPanjang.text = args.celanaLtPanjang ?? ''; _celanaCln.text = args.celanaCln ?? '';
 
-      // Rok
       _rokPi.text = args.rokPi ?? ''; _rokPa.text = args.rokPa ?? '';
       _rokPaPanjang.text = args.rokPaPanjang ?? ''; _rokLt.text = args.rokLt ?? ''; _rokRok.text = args.rokRok ?? '';
     }
@@ -93,150 +91,100 @@ class _PelangganFormScreenState extends State<PelangganFormScreen> {
         await _service.create(p);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data berhasil disimpan')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profil pelanggan berhasil disimpan')));
         Navigator.pop(context, true);
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menyimpan: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Widget _sectionHeader(String title) {
+  Widget _sectionLabel(String title, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.only(top: 24, bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.only(top: 32, bottom: 20),
+      child: Row(
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1565C0))),
-          const Divider(thickness: 1.5),
+          Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: const Color(0xFFF97316).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: const Color(0xFFF97316), size: 18)),
+          const SizedBox(width: 12),
+          Text(title, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13, color: const Color(0xFF1E293B))),
+          const SizedBox(width: 12),
+          const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
         ],
       ),
     );
   }
 
-  Widget _inputGrid(List<Widget> children) {
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 8,
-      mainAxisSpacing: 8,
-      childAspectRatio: 2.2,
-      children: children,
-    );
+  Widget _grid(List<Widget> children) {
+    return GridView.count(crossAxisCount: 3, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 2.5, children: children);
   }
 
-  Widget _field(TextEditingController ctrl, String label, {bool required = false, VoidCallback? onTap}) {
+  Widget _input(TextEditingController ctrl, String label, {bool required = false}) {
     return TextFormField(
       controller: ctrl,
-      readOnly: onTap != null,
-      onTap: onTap,
       decoration: InputDecoration(
         labelText: label,
-        isDense: true,
-        border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        suffixIcon: onTap != null ? const Icon(Icons.calendar_today, size: 16) : null,
+        labelStyle: const TextStyle(fontSize: 10),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       ),
-      validator: required ? (v) => v == null || v.isEmpty ? 'Wajib' : null : null,
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+      keyboardType: TextInputType.text,
+      validator: required ? (v) => v!.isEmpty ? 'Wajib' : null : null,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(_existing == null ? 'Tambah Pelanggan' : 'Edit Pelanggan'),
-        backgroundColor: const Color(0xFF1565C0),
-        foregroundColor: Colors.white,
+        title: Text(_existing == null ? 'Registrasi Pelanggan' : 'Ubah Profil Pelanggan', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
           children: [
-            _sectionHeader('Data Umum'),
-            _field(_namaCtrl, 'Nama Lengkap', required: true),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: _field(_hpCtrl, 'Nomor HP', required: true)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _field(_ketCtrl, 'Keterangan'),
+            _sectionLabel('INFORMASI DASAR', Icons.person_outline_rounded),
+            _input(_namaCtrl, 'Nama Lengkap Pelanggan', required: true),
+            const SizedBox(height: 16),
+            _input(_hpCtrl, 'Nomor HP / WhatsApp', required: true),
+            const SizedBox(height: 16),
+            _input(_ketCtrl, 'Keterangan Tambahan / Karakter Pelanggan'),
 
-            _sectionHeader('Ukuran Baju / Kemeja / Blezer'),
-            const Text('Panjang', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 8),
-            _inputGrid([
-              _field(_bajuPu, 'PU'), _field(_bajuPi, 'PI'), _field(_bajuPa, 'PA'),
-              _field(_bajuLt, 'LT'), _field(_bajuGn, 'GN'),
-            ]),
+            _sectionLabel('UKURAN BAJU / KEMEJA / JAS', Icons.checkroom_rounded),
+            const Text('Panjang (Cm)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.grey)),
             const SizedBox(height: 12),
-            const Text('Lingkar', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 8),
-            _inputGrid([
-              _field(_bajuLe, 'LE'), _field(_bajuDa, 'DA'), _field(_bajuPiLingkar, 'PI'), _field(_bajuPaLingkar, 'PA'),
-            ]),
+            _grid([ _input(_bajuPu, 'PU'), _input(_bajuPi, 'PI'), _input(_bajuPa, 'PA'), _input(_bajuLt, 'LT'), _input(_bajuGn, 'GN') ]),
+            const SizedBox(height: 20),
+            const Text('Lingkar (Cm)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.grey)),
             const SizedBox(height: 12),
-            const Text('Lebar', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 8),
-            _inputGrid([
-              _field(_bajuBh, 'BH'), _field(_bajuPuLebar, 'PU'), _field(_bajuDaLebar, 'DA'),
-            ]),
+            _grid([ _input(_bajuLe, 'LE'), _input(_bajuDa, 'DA'), _input(_bajuPiLingkar, 'L.PI'), _input(_bajuPaLingkar, 'L.PA') ]),
+            const SizedBox(height: 20),
+            const Text('Lebar (Cm)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.grey)),
             const SizedBox(height: 12),
-            const Text('Lingkar Kerung Lengan', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 8),
-            _inputGrid([
-              _field(_bajuAts, 'ATS'), _field(_bajuSk, 'SK'), _field(_bajuBwh, 'BWH'),
-            ]),
+            _grid([ _input(_bajuBh, 'BH'), _input(_bajuPuLebar, 'L.PU'), _input(_bajuDaLebar, 'L.DA') ]),
+            const SizedBox(height: 20),
+            const Text('Lengan & Bahu (Cm)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.grey)),
             const SizedBox(height: 12),
-            const Text('Panjang Lengan', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 8),
-            _inputGrid([
-              _field(_bajuA, 'A'), _field(_bajuB, 'B'),
-            ]),
+            _grid([ _input(_bajuAts, 'ATS'), _input(_bajuSk, 'SK'), _input(_bajuBwh, 'BWH'), _input(_bajuA, 'A'), _input(_bajuB, 'B') ]),
 
-            _sectionHeader('Ukuran Celana'),
-            const Text('Lingkar', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 8),
-            _inputGrid([
-              _field(_celanaPi, 'PI'), _field(_celanaPa, 'PA'), _field(_celanaPh, 'PH'),
-              _field(_celanaLt, 'LT'), _field(_celanaPsk, 'PSK'),
-            ]),
-            const SizedBox(height: 12),
-            const Text('Panjang', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 8),
-            _inputGrid([
-              _field(_celanaLtPanjang, 'LT'), _field(_celanaCln, 'CLN'),
-            ]),
+            _sectionLabel('UKURAN CELANA', Icons.straighten_rounded),
+            _grid([ _input(_celanaPi, 'PI'), _input(_celanaPa, 'PA'), _input(_celanaPh, 'PH'), _input(_celanaLt, 'LT'), _input(_celanaPsk, 'PSK'), _input(_celanaLtPanjang, 'P.LT'), _input(_celanaCln, 'CLN') ]),
 
-            _sectionHeader('Ukuran Rok'),
-            const Text('Lingkar', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 8),
-            _inputGrid([
-              _field(_rokPi, 'PI'), _field(_rokPa, 'PA'),
-            ]),
-            const SizedBox(height: 12),
-            const Text('Panjang', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 8),
-            _inputGrid([
-              _field(_rokPaPanjang, 'PA'), _field(_rokLt, 'LT'), _field(_rokRok, 'ROK'),
-            ]),
+            _sectionLabel('UKURAN ROK', Icons.accessibility_new_rounded),
+            _grid([ _input(_rokPi, 'PI'), _input(_rokPa, 'PA'), _input(_rokPaPanjang, 'P.PA'), _input(_rokLt, 'LT'), _input(_rokRok, 'ROK') ]),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 56),
             SizedBox(
-              height: 48,
+              height: 56,
               child: ElevatedButton(
                 onPressed: _loading ? null : _save,
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white),
-                child: _loading ? const CircularProgressIndicator(color: Colors.white) : const Text('SIMPAN SEMUA DATA', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('SIMPAN PROFIL & UKURAN', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
               ),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 48),
           ],
         ),
       ),

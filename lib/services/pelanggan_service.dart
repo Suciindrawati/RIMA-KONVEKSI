@@ -16,9 +16,12 @@ class PelangganService {
     };
   }
 
-  Future<Map<String, dynamic>> getPaginated(int page) async {
+  Future<Map<String, dynamic>> getPaginated(int page, {String? search}) async {
+    String url = '${ApiConstants.pelanggan}?page=$page';
+    if (search != null && search.isNotEmpty) url += '&search=$search';
+    
     final response = await http.get(
-      Uri.parse('${ApiConstants.pelanggan}?page=$page'),
+      Uri.parse(url),
       headers: await _headers(),
     );
     if (response.statusCode == 200) {

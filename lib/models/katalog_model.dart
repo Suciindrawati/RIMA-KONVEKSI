@@ -4,6 +4,7 @@ class KatalogModel {
   final String? deskripsi;
   final String? gambar;
   final String? createdAt;
+  final List<String>? gallery;
 
   KatalogModel({
     this.id,
@@ -11,15 +12,21 @@ class KatalogModel {
     this.deskripsi,
     this.gambar,
     this.createdAt,
+    this.gallery,
   });
 
   factory KatalogModel.fromJson(Map<String, dynamic> json) {
+    List<String>? gal;
+    if (json['gambars'] != null) {
+      gal = (json['gambars'] as List).map((e) => e['gambar'].toString()).toList();
+    }
     return KatalogModel(
       id: json['id'],
       judul: json['judul'] ?? '',
       deskripsi: json['deskripsi'],
       gambar: json['gambar'],
       createdAt: json['created_at'],
+      gallery: gal,
     );
   }
 

@@ -8,9 +8,17 @@ use Illuminate\Http\Request;
 
 class ProdukController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(Produk::latest()->paginate(10));
+        $query = Produk::latest();
+
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where('nama_produk', 'like', "%$search%")
+                  ->orWhere('jenis_produk', 'like', "%$search%");
+        }
+
+        return response()->json($query->paginate(15));
     }
 
     public function store(Request $request)

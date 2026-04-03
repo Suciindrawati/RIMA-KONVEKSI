@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Transaksi;
 use App\Models\Pelanggan;
 use App\Models\Produk;
+use App\Models\Katalog;
 use Illuminate\Http\Request;
 
 class TransaksiController extends Controller
@@ -15,10 +16,26 @@ class TransaksiController extends Controller
         $query = Transaksi::with(['pelanggan', 'produk']);
 
         if ($request->has('status')) {
-            $query->where('status', $request->status);
+            $status = $request->status;
+            if (is_array($status)) {
+                $query->whereIn('status', $status);
+            } else {
+                $query->where('status', $status);
+            }
         }
 
-        $transaksi = $query->latest()->paginate(10);
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->whereHas('pelanggan', function($pq) use ($search) {
+                    $pq->where('nama', 'like', "%$search%");
+                })->orWhereHas('produk', function($prq) use ($search) {
+                    $prq->where('nama_produk', 'like', "%$search%");
+                });
+            });
+        }
+
+        $transaksi = $query->latest()->paginate(15);
         return response()->json($transaksi);
     }
 
@@ -74,18 +91,27 @@ class TransaksiController extends Controller
 
     public function dashboard()
     {
-        $totalPendapatan = Transaksi::where('status', 'Pesanan Selesai')->sum('total_harga');
+        // Hitung total pendapatan hanya dari pesanan yang sudah selesai
+        $totalPendapatan = Transaksi::whereIn('status', ['Pesanan Selesai', 'Selesai'])->sum('total_harga');
+        
         $totalTransaksi  = Transaksi::count();
         $totalPelanggan  = Pelanggan::count();
         $totalProduk     = Produk::count();
-        $recentTransaksi = Transaksi::with(['pelanggan', 'produk'])->latest()->limit(10)->get();
+        
+        // Hitung jumlah transaksi yang sudah selesai
+        $transaksiSelesai = Transaksi::whereIn('status', ['Pesanan Selesai', 'Selesai'])->count();
+
+        $totalKatalog  = Katalog::count();
+        $recentTransaksi = Transaksi::with(['pelanggan', 'produk'])->latest()->limit(5)->get();
 
         return response()->json([
-            'total_pendapatan'  => $totalPendapatan,
-            'total_transaksi'   => $totalTransaksi,
-            'total_pelanggan'   => $totalPelanggan,
-            'total_produk'      => $totalProduk,
-            'recent_transaksi'  => $recentTransaksi,
+            'total_pendapatan'   => $totalPendapatan,
+            'total_transaksi'    => $totalTransaksi,
+            'transaksi_selesai'  => $transaksiSelesai,
+            'total_pelanggan'    => $totalPelanggan,
+            'total_produk'       => $totalProduk,
+            'total_katalog'      => $totalKatalog,
+            'recent_transaksi'   => $recentTransaksi,
         ]);
     }
 }

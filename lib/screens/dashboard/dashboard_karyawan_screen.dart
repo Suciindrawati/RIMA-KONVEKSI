@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 import '../../services/transaksi_service.dart';
 import '../../models/transaksi_model.dart';
 import '../../models/pelanggan_model.dart';
 import '../../constants/api_constants.dart';
-import 'package:intl/intl.dart';
 
 class DashboardKaryawanScreen extends StatefulWidget {
   const DashboardKaryawanScreen({super.key});
@@ -15,7 +15,7 @@ class DashboardKaryawanScreen extends StatefulWidget {
 
 class _DashboardKaryawanScreenState extends State<DashboardKaryawanScreen> {
   String _nama = '';
-  final _transaksiService = TransaksiService();
+  final _ts = TransaksiService();
   List<TransaksiModel> _runningOrders = [];
   bool _loadingOrders = true;
 
@@ -31,7 +31,7 @@ class _DashboardKaryawanScreenState extends State<DashboardKaryawanScreen> {
       final nama = await AuthService().getNama();
       setState(() => _nama = nama ?? '');
       
-      final res = await _transaksiService.getPaginated(page: 1, status: 'Pesanan Dibuat');
+      final res = await _ts.getPaginated(page: 1, status: ['Pesanan Dibuat', 'Diproses']);
       final List data = res['data'];
       
       if (mounted) {
@@ -49,103 +49,86 @@ class _DashboardKaryawanScreenState extends State<DashboardKaryawanScreen> {
   void _showOrderDetail(TransaksiModel t) {
     final p = t.pelanggan;
     final pr = t.produk;
-    final imgUrl = pr?.gambar != null
-        ? '${ApiConstants.baseUrl.replaceAll('/api', '')}/storage/${pr!.gambar}'
-        : null;
-
-    // Cek apakah ada data ukuran sama sekali
-    bool hasAnySize = false;
-    if (p != null) {
-      final allSizes = [
-        p.bajuPu, p.bajuPi, p.bajuPa, p.bajuLt, p.bajuGn, p.bajuLe, p.bajuDa, p.bajuPiLingkar, p.bajuPaLingkar,
-        p.celanaPi, p.celanaPa, p.celanaPh, p.celanaLt, p.celanaPsk,
-        p.rokPi, p.rokPa, p.rokLt
-      ];
-      hasAnySize = allSizes.any((s) => s != null && s.isNotEmpty);
-    }
+    final imgUrl = pr?.gambar != null ? '${ApiConstants.baseUrl.replaceAll('/api', '')}/storage/${pr!.gambar}' : null;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.85,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
+        height: MediaQuery.of(context).size.height * 0.9,
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
         child: Column(
           children: [
-            Container(
-              margin: const EdgeInsets.all(12),
-              width: 40, height: 4,
-              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
-            ),
+            Container(margin: const EdgeInsets.all(16), width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(2))),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        if (imgUrl != null)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Image.network(imgUrl, width: 80, height: 80, fit: BoxFit.cover),
-                          )
-                        else
-                          Container(
-                            width: 80, height: 80,
-                            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10)),
-                            child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                          ),
-                        const SizedBox(width: 16),
+                        Container(
+                          width: 80, height: 80,
+                          decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(16)),
+                          child: imgUrl != null ? ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.network(imgUrl, fit: BoxFit.cover)) : const Icon(Icons.image_not_supported, color: Colors.grey),
+                        ),
+                        const SizedBox(width: 20),
                         Expanded(child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(t.namaProduk ?? '-', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                            Text('Jumlah: ${t.jumlah} Pcs', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600)),
+                            Text(t.namaProduk ?? 'Produk Tanpa Nama', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 18)),
                             const SizedBox(height: 4),
-                            Text(t.status, style: const TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(8)),
+                              child: Text('${t.jumlah} PCS', style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.w900, fontSize: 10)),
+                            ),
                           ],
                         ))
                       ],
                     ),
-                    const Divider(height: 32),
-                    const Text('DETAIL PELANGGAN', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
-                    const SizedBox(height: 8),
-                    Text(t.namaPelanggan ?? '-', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text(p?.noHp ?? '-', style: const TextStyle(color: Colors.grey)),
-                    if (p?.keterangan != null && p!.keterangan!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text('Catatan: ${p.keterangan}', style: const TextStyle(fontStyle: FontStyle.italic)),
-                    ],
-                    const Divider(height: 32),
-                    const Text('UKURAN BADAN (CM)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
+                    const Divider(height: 48, color: Color(0xFFF1F5F9)),
+                    
+                    Text('IDENTITAS PELANGGAN', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: const Color(0xFF94A3B8), fontSize: 11, letterSpacing: 1)),
                     const SizedBox(height: 12),
-                    if (!hasAnySize)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
-                        child: Center(
-                          child: Text('Data ukuran belum diisi untuk pelanggan ini.', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
-                        ),
-                      )
-                    else ...[
-                      _buildSizeSection('BAJU / ATASAN', {
-                        'PU': p?.bajuPu, 'PI': p?.bajuPi, 'PA': p?.bajuPa, 'LT': p?.bajuLt, 'GN': p?.bajuGn,
-                        'LE': p?.bajuLe, 'DA': p?.bajuDa, 'PI (Lingkar)': p?.bajuPiLingkar, 'PA (Lingkar)': p?.bajuPaLingkar,
-                        'BH': p?.bajuBh, 'PU (Lebar)': p?.bajuPuLebar, 'DA (Lebar)': p?.bajuDaLebar,
-                      }),
-                      _buildSizeSection('CELANA', {
-                        'PI': p?.celanaPi, 'PA': p?.celanaPa, 'PH': p?.celanaPh, 'LT': p?.celanaLt, 'PSK': p?.celanaPsk,
-                        'LT (Pjg)': p?.celanaLtPanjang, 'CLN': p?.celanaCln,
-                      }),
-                      _buildSizeSection('ROK', {
-                        'PI': p?.rokPi, 'PA': p?.rokPa, 'LT': p?.rokLt, 'PA (Pjg)': p?.rokPaPanjang, 'ROK': p?.rokRok,
-                      }),
+                    Text(t.namaPelanggan ?? '-', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 20)),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.message_rounded, color: Color(0xFF10B981), size: 16),
+                        const SizedBox(width: 8),
+                        Text(p?.noHp ?? '-', style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF64748B))),
+                      ],
+                    ),
+                    if (p?.keterangan != null && p!.keterangan!.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: const Color(0xFFFFF7ED), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFFFEDD5))),
+                        child: Text('CATATAN: ${p.keterangan}', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Color(0xFF9A3412))),
+                      ),
                     ],
-                    const SizedBox(height: 32),
+
+                    const Divider(height: 48, color: Color(0xFFF1F5F9)),
+                    Text('PANDUAN UKURAN PRODUKSI (CM)', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: const Color(0xFF94A3B8), fontSize: 11, letterSpacing: 1)),
+                    const SizedBox(height: 16),
+                    _buildSizeGroup('ATASAN / BAJU', p, isBaju: true),
+                    _buildSizeGroup('BAWAHAN / CELANA', p, isCelana: true),
+                    _buildSizeGroup('ROK', p, isRok: true),
+                    
+                    const SizedBox(height: 40),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton.icon(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.check_circle_rounded),
+                        label: const Text('PAHAM, LANJUT PRODUKSI', style: TextStyle(fontWeight: FontWeight.w900)),
+                      ),
+                    ),
+                    const SizedBox(height: 40),
                   ],
                 ),
               ),
@@ -156,31 +139,40 @@ class _DashboardKaryawanScreenState extends State<DashboardKaryawanScreen> {
     );
   }
 
-  Widget _buildSizeSection(String title, Map<String, String?> sizes) {
-    final validSizes = sizes.entries.where((e) => e.value != null && e.value!.isNotEmpty).toList();
-    if (validSizes.isEmpty) return const SizedBox.shrink();
+  Widget _buildSizeGroup(String title, PelangganModel? p, {bool isBaju = false, bool isCelana = false, bool isRok = false}) {
+    if (p == null) return const SizedBox.shrink();
+    Map<String, String?> items = {};
+    if (isBaju) {
+      items = {'PU': p.bajuPu, 'PI': p.bajuPi, 'PA': p.bajuPa, 'LT': p.bajuLt, 'GN': p.bajuGn, 'LE': p.bajuLe, 'DA': p.bajuDa, 'PI (L)': p.bajuPiLingkar, 'PA (L)': p.bajuPaLingkar, 'BH': p.bajuBh, 'PU (Lebar)': p.bajuPuLebar, 'DA (Lebar)': p.bajuDaLebar, 'ATS': p.bajuAts, 'SK': p.bajuSk, 'BWH': p.bajuBwh, 'LGN A': p.bajuA, 'LGN B': p.bajuB};
+    } else if (isCelana) {
+      items = {'PI (L)': p.celanaPi, 'PA (L)': p.celanaPa, 'PH': p.celanaPh, 'LT': p.celanaLt, 'PSK': p.celanaPsk, 'P.LT': p.celanaLtPanjang, 'CLN': p.celanaCln};
+    } else if (isRok) {
+      items = {'PI (L)': p.rokPi, 'PA (L)': p.rokPa, 'P.PA': p.rokPaPanjang, 'LT': p.rokLt, 'ROK': p.rokRok};
+    }
+
+    final filtered = items.entries.where((e) => e.value != null && e.value!.isNotEmpty && e.value != 'null').toList();
+    if (filtered.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue)),
-        const SizedBox(height: 8),
+        Text(title, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13, color: const Color(0xFFF97316))),
+        const SizedBox(height: 12),
         Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          children: validSizes.map((e) => Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+          spacing: 10, runSpacing: 10,
+          children: filtered.map((e) => Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('${e.key}: ', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                Text(e.value!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                Text('${e.key}: ', style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+                Text(e.value!, style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w900, color: const Color(0xFF1E293B))),
               ],
             ),
           )).toList(),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
       ],
     );
   }
@@ -193,67 +185,55 @@ class _DashboardKaryawanScreenState extends State<DashboardKaryawanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
+        toolbarHeight: 80,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Dashboard Karyawan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text('Halo, $_nama', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+            Text('Halo, $_nama!', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, fontSize: 20)),
+            const Text('Semangat bekerja hari ini!', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF64748B))),
           ],
         ),
-        backgroundColor: const Color(0xFF1565C0),
-        foregroundColor: Colors.white,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
-          IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
+          IconButton(
+            icon: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20)),
+            onPressed: _logout,
+          ),
+          const SizedBox(width: 16),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _loadData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Menu Utama',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              Text('MENU UTAMA', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 12, color: const Color(0xFF94A3B8), letterSpacing: 1)),
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(child: _menuCard(context, Icons.people, 'Data Pelanggan', '/pelanggan', const Color(0xFF1565C0))),
-                  const SizedBox(width: 12),
-                  Expanded(child: _menuCard(context, Icons.photo_library, 'Katalog Model', '/katalog', const Color(0xFFFF9800))),
+                  Expanded(child: _menuCard(context, Icons.people_alt_rounded, 'PELANGGAN', '/pelanggan', const Color(0xFFF97316))),
+                  const SizedBox(width: 16),
+                  Expanded(child: _menuCard(context, Icons.photo_library_rounded, 'KATALOG', '/katalog', const Color(0xFF1E293B))),
                 ],
               ),
-              const SizedBox(height: 32),
-              const Text(
-                'Pesanan Sedang Diproses',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1565C0)),
+              const SizedBox(height: 40),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('PESANAN MASUK', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 12, color: const Color(0xFF94A3B8), letterSpacing: 1)),
+                  if (!_loadingOrders && _runningOrders.isNotEmpty)
+                    Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: const Color(0xFFF97316), borderRadius: BorderRadius.circular(6)), child: Text('${_runningOrders.length} AKTIF', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900))),
+                ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               if (_loadingOrders)
-                const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+                const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
               else if (_runningOrders.isEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey.shade400),
-                      const SizedBox(height: 12),
-                      const Text('Tidak ada pesanan aktif', style: TextStyle(color: Colors.grey)),
-                    ],
-                  ),
-                )
+                _emptyState()
               else
                 ListView.separated(
                   shrinkWrap: true,
@@ -262,66 +242,27 @@ class _DashboardKaryawanScreenState extends State<DashboardKaryawanScreen> {
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final t = _runningOrders[index];
-                    return Card(
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      child: InkWell(
+                    return Container(
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE2E8F0))),
+                      child: ListTile(
                         onTap: () => _showOrderDetail(t),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(Icons.assignment_outlined, color: Color(0xFF1565C0)),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      t.namaProduk ?? 'Produk tidak tersedia',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Pelanggan: ${t.namaPelanggan ?? "-"}',
-                                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                                    ),
-                                    Text(
-                                      'Jumlah: ${t.jumlah} Pcs',
-                                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.shade100,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Text(
-                                  'PROSES',
-                                  style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ],
-                          ),
+                        contentPadding: const EdgeInsets.all(16),
+                        leading: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
+                          child: const Icon(Icons.cut_rounded, color: Color(0xFFF97316)),
                         ),
+                        title: Text(t.namaProduk ?? 'Pesanan Khusus', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 15)),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text('Pelanggan: ${t.namaPelanggan ?? "-"} • ${t.jumlah} Pcs', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFFCBD5E1)),
                       ),
                     );
                   },
                 ),
+                const SizedBox(height: 40),
             ],
           ),
         ),
@@ -329,32 +270,35 @@ class _DashboardKaryawanScreenState extends State<DashboardKaryawanScreen> {
     );
   }
 
+  Widget _emptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFE2E8F0), style: BorderStyle.none)), // Transparent border or dotted?
+      child: Column(
+        children: [
+          const Icon(Icons.task_alt_rounded, size: 48, color: Color(0xFFCBD5E1)),
+          const SizedBox(height: 16),
+          const Text('Semua kerjaan beres!', style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.bold)),
+          const Text('Tidak ada pesanan baru saat ini.', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
   Widget _menuCard(BuildContext context, IconData icon, String label, String route, Color color) {
     return InkWell(
       onTap: () => Navigator.pushNamed(context, route),
+      borderRadius: BorderRadius.circular(24),
       child: Container(
-        height: 120,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-          ],
-        ),
+        height: 140,
+        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))]),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: color.withOpacity(0.1),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              textAlign: TextAlign.center,
-            ),
+            Icon(icon, color: Colors.white, size: 32),
+            const SizedBox(height: 12),
+            Text(label, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, fontSize: 12, color: Colors.white, letterSpacing: 1)),
           ],
         ),
       ),

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../models/produk_model.dart';
 import '../../services/produk_service.dart';
@@ -43,10 +44,7 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       final bytes = await image.readAsBytes();
-      setState(() {
-        _imageBytes = bytes;
-        _imageName = image.name;
-      });
+      setState(() { _imageBytes = bytes; _imageName = image.name; });
     }
   }
 
@@ -57,7 +55,7 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
       final p = ProdukModel(
         namaProduk: _namaCtrl.text,
         jenisProduk: _jenisCtrl.text,
-        stok: int.parse(_stokCtrl.text),
+        stok: int.tryParse(_stokCtrl.text) ?? 0,
         deskripsi: _deskripsiCtrl.text,
       );
       if (_existing != null) {
@@ -79,77 +77,72 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text(_existing == null ? 'Tambah Produk' : 'Edit Produk'),
-        backgroundColor: const Color(0xFF1565C0),
-        foregroundColor: Colors.white,
+        title: Text(_existing == null ? 'Tambah Produk' : 'Ubah Data Produk', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           children: [
             Center(
               child: GestureDetector(
                 onTap: _pickImage,
                 child: Container(
-                  width: 150,
-                  height: 150,
+                  width: 160, height: 160,
                   decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[400]!),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
                   child: _imageBytes != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.memory(_imageBytes!, fit: BoxFit.cover),
-                        )
-                      : const Column(
+                      ? ClipRRect(borderRadius: BorderRadius.circular(28), child: Image.memory(_imageBytes!, fit: BoxFit.cover))
+                      : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.add_a_photo, size: 40, color: Colors.grey),
-                            SizedBox(height: 8),
-                            Text('Tambah Foto', style: TextStyle(color: Colors.grey)),
+                            Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFFFFF7ED), borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.add_a_photo_rounded, size: 30, color: Color(0xFFF97316))),
+                            const SizedBox(height: 12),
+                            const Text('Foto Produk', style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.bold)),
                           ],
                         ),
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 40),
             TextFormField(
               controller: _namaCtrl,
-              decoration: const InputDecoration(labelText: 'Nama Produk', border: OutlineInputBorder()),
-              validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              decoration: const InputDecoration(labelText: 'Nama Produk / Jenis Bahan'),
+              validator: (v) => v!.isEmpty ? 'Nama harus diisi' : null,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             TextFormField(
               controller: _jenisCtrl,
-              decoration: const InputDecoration(labelText: 'Jenis Produk (Baju/Celana/dst)', border: OutlineInputBorder()),
-              validator: (v) => v!.isEmpty ? 'Wajib diisi' : null,
+              decoration: const InputDecoration(labelText: 'Kategori (Baju/Celana/Jas/dst)'),
+              validator: (v) => v!.isEmpty ? 'Kategori harus diisi' : null,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             TextFormField(
               controller: _stokCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Stok', border: OutlineInputBorder()),
-              validator: (v) => v!.isEmpty ? 'Wajib' : null,
+              decoration: const InputDecoration(labelText: 'Jumlah Stok (Roll/Pcs)'),
+              validator: (v) => v!.isEmpty ? 'Stok wajib diisi' : null,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             TextFormField(
               controller: _deskripsiCtrl,
               maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Deskripsi Produk', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Keterangan Tambahan'),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 48),
             SizedBox(
-              height: 48,
+              height: 56,
               child: ElevatedButton(
                 onPressed: _loading ? null : _save,
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white),
-                child: _loading ? const CircularProgressIndicator(color: Colors.white) : const Text('SIMPAN PRODUK', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('SIMPAN PRODUK', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
               ),
             ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
