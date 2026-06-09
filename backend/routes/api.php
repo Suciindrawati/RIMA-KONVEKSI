@@ -51,6 +51,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Transaksi
     Route::get('/transaksi',      [TransaksiController::class, 'index']);
     Route::middleware('admin')->group(function () {
+        Route::get('/transaksi/export-pdf', [TransaksiController::class, 'exportPdf']);
         Route::post('/transaksi',     [TransaksiController::class, 'store']);
         Route::put('/transaksi/{id}', [TransaksiController::class, 'update']);
         Route::delete('/transaksi/{id}', [TransaksiController::class, 'destroy']);

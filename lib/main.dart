@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
@@ -12,8 +13,11 @@ import 'screens/produk/produk_screen.dart';
 import 'screens/produk/produk_form_screen.dart';
 import 'screens/transaksi/transaksi_screen.dart';
 import 'screens/katalog/katalog_screen.dart';
+import 'screens/laporan/laporan_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('id_ID', null);
   runApp(const RimaKonveksiApp());
 }
 
@@ -89,6 +93,7 @@ class RimaKonveksiApp extends StatelessWidget {
         '/transaksi': (ctx) => const TransaksiScreen(),
         '/transaksi-form': (ctx) => const TransaksiFormScreen(),
         '/katalog': (ctx) => const KatalogScreen(),
+        '/laporan': (ctx) => const LaporanScreen(),
       },
     );
   }

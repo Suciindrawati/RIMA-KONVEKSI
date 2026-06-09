@@ -110,7 +110,7 @@
                 <div style="text-align: center; padding: 4rem 1rem; background:white; border-radius:24px; border: 1px solid var(--border);">
                     <i data-lucide="user-x" style="width: 60px; height: 60px; color: #cbd5e1; margin-bottom: 1.5rem;"></i>
                     <h3 style="font-size: 1.25rem; font-weight: 800; margin-bottom: 0.5rem;">Nama Belum Terdaftar</h3>
-                    <p style="color: var(--secondary); max-width: 300px; margin: 0 auto;">Pastikan penulisan nama benar, atau hubungi Admin Rima Konveksi.</p>
+                    <p style="color: var(--secondary); max-width: 300px; margin: 0 auto;">Pastikan penulisan nama benar, atau <a href="https://wa.me/6282251423232" target="_blank" style="color: var(--brand); font-weight: 700; text-decoration: none;">hubungi Admin Rima Konveksi di 0822-5142-3232</a>.</p>
                 </div>
             @endif
         @else

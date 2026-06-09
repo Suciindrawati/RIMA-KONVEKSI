@@ -114,4 +114,25 @@ class TransaksiController extends Controller
             'recent_transaksi'   => $recentTransaksi,
         ]);
     }
+
+    public function exportPdf(Request $request)
+    {
+        $query = Transaksi::with(['pelanggan', 'produk']);
+
+        $bulan = $request->input('bulan', date('m'));
+        $tahun = $request->input('tahun', date('Y'));
+
+        $query->whereMonth('created_at', $bulan)
+              ->whereYear('created_at', $tahun);
+
+        $transaksi = $query->orderBy('created_at', 'desc')->get();
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.laporan_transaksi', [
+            'transaksi' => $transaksi,
+            'bulan' => $bulan,
+            'tahun' => $tahun
+        ]);
+
+        return $pdf->download("Laporan_Transaksi_{$bulan}_{$tahun}.pdf");
+    }
 }

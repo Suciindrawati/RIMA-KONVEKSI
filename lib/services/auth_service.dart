@@ -44,10 +44,15 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    final headers = await _headers();
-    await http.post(Uri.parse(ApiConstants.logout), headers: headers);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    try {
+      final headers = await _headers();
+      await http.post(Uri.parse(ApiConstants.logout), headers: headers);
+    } catch (e) {
+      // Abaikan error jaringan saat logout agar sesi lokal tetap bisa dihapus
+    } finally {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+    }
   }
 
   Future<void> saveSession(String token, String role, String nama, int id) async {

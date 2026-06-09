@@ -18,6 +18,14 @@ class DatabaseSeeder extends Seeder
             'role'     => 'admin',
         ]);
 
+        // Karyawan user
+        User::create([
+            'nama'     => 'Karyawan',
+            'email'    => 'karyawan@rimakonveksi.com',
+            'password' => Hash::make('karyawan123'),
+            'role'     => 'karyawan',
+        ]);
+
         // Data aplikasi
         $this->call([
             ProdukSeeder::class,

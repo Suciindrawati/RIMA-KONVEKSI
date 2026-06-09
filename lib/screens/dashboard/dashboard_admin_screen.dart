@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:open_file/open_file.dart';
 import '../../services/auth_service.dart';
 import '../../services/transaksi_service.dart';
 import '../../models/transaksi_model.dart';
@@ -376,6 +377,7 @@ class _DashboardAdminScreenState extends State<DashboardAdminScreen> {
                 _drawerItem(context, Icons.people_rounded, 'Manajemen Pelanggan', '/pelanggan'),
                 _drawerItem(context, Icons.inventory_2_rounded, 'Stok Produk & Bahan', '/produk'),
                 _drawerItem(context, Icons.receipt_rounded, 'Riwayat Transaksi', '/transaksi'),
+                _drawerItem(context, Icons.picture_as_pdf_rounded, 'Laporan Transaksi', '/laporan'),
                 _drawerItem(context, Icons.auto_fix_high_rounded, 'Katalog Model', '/katalog'),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 20),

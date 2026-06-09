@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import '../constants/api_constants.dart';
 import '../models/transaksi_model.dart';
 import 'auth_service.dart';
@@ -28,7 +30,7 @@ class TransaksiService {
     if (search != null && search.isNotEmpty) url += '&search=$search';
     
     final response = await http.get(
-      Uri.parse(url),
+      Uri.parse(Uri.encodeFull(url)),
       headers: await _headers(),
     );
     if (response.statusCode == 200) {
@@ -79,5 +81,27 @@ class TransaksiService {
     final response = await http.get(Uri.parse(ApiConstants.dashboard), headers: await _headers());
     if (response.statusCode == 200) return jsonDecode(response.body);
     throw Exception('Gagal mengambil data dashboard');
+  }
+
+  Future<String?> downloadLaporanPdf(int bulan, int tahun) async {
+    final url = '${ApiConstants.transaksi}/export-pdf?bulan=$bulan&tahun=$tahun';
+    final response = await http.get(Uri.parse(url), headers: await _headers());
+    
+    if (response.statusCode == 200) {
+      final bytes = response.bodyBytes;
+      Directory? dir;
+      if (Platform.isAndroid) {
+        // Menggunakan folder khusus aplikasi di penyimpanan eksternal agar terhindar dari Permission Denied (Error 13) di Android 10+
+        dir = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
+      } else {
+        dir = await getApplicationDocumentsDirectory();
+      }
+      
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final file = File('${dir.path}/Laporan_Transaksi_$bulan\_${tahun}_$timestamp.pdf');
+      await file.writeAsBytes(bytes);
+      return file.path;
+    }
+    throw Exception('Gagal mengunduh laporan PDF');
   }
 }
